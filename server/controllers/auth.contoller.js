@@ -1,5 +1,6 @@
 const BaseError = require("../errors/base.error");
 const userModel = require("../models/user.model");
+const mailService = require("../service/mail.service");
 
 class AuthContoller {
     async login(req, res, next) {
@@ -7,10 +8,12 @@ class AuthContoller {
             const { email } = req.body;
             const existUser = await userModel.findOne({ email })
             if (existUser) {
-                throw BaseError.BadRequest('User already exist', [{email: "User already exist"}])
+                await mailService.sendOtp(existUser.email)
+                return res.status(200).json({ message: 'existing user'})
             }
-            const createdUser = await userModel.create({ email })
-            res.status(201).json(createdUser)
+            const newUser = await userModel.create({ email })
+            await mailService.sendOtp(newUser.email)
+            res.status(200).json({ message: 'new_user'})
         } catch ( error ) {
             next(error)
         }
@@ -19,9 +22,15 @@ class AuthContoller {
     async verify(req, res, next) {
         try {
             const {email, otp} = req.body;
+            const result = await mailService.verifyOtp(email, otp)
+            if (result) {
+                await userModel.findOneAndUpdate({email}, {isVerified: true})
+                res.status(200).json({ message: 'verified'})
+            }
+
             res.json({ email, otp})
         } catch (error) {
-            
+            next(error)
         }
     }
 }
