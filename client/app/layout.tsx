@@ -1,21 +1,23 @@
 import { ThemeProvider } from "@/components/providers/theme.provider";
 import "./globals.css";
 import type { Metadata } from "next";
-import { Space_Grotesk} from "next/font/google";
+import { Space_Grotesk } from "next/font/google";
+import QueryProvider from "@/components/providers/query.provider";
+import { Toaster } from "@/components/ui/sonner";
+import SessionProvider from "@/components/providers/session.provider";
 
 const spaceGrotesk = Space_Grotesk({
-  weight: ['300', '400', '500', '600', '700'],
-  subsets: ['latin'],
-  variable: '--font-spaceGrotesk'
-})
+  weight: ["300", "400", "500", "600", "700"],
+  subsets: ["latin"],
+  variable: "--font-spaceGrotesk",
+});
 
 export const metadata: Metadata = {
   title: "Chat Application",
   description: "Chat Application created with Nextjs and Nodejs",
   icons: {
-    icon: '/logo.svg'
-  }
-
+    icon: "/logo.svg",
+  },
 };
 
 export default function RootLayout({
@@ -24,19 +26,27 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body
-        className={` ${spaceGrotesk.variable} antialiased`}
-        suppressHydrationWarning>
-           <ThemeProvider
+
+    <SessionProvider>
+      <QueryProvider>
+      <html lang="en" suppressHydrationWarning>
+        <body
+          className={` ${spaceGrotesk.variable} antialiased`}
+          suppressHydrationWarning
+        >
+          <ThemeProvider
             attribute="class"
             defaultTheme="system"
             enableSystem
             disableTransitionOnChange
           >
-            {children}
+            <main>{children}</main>
+            <Toaster />
           </ThemeProvider>
-      </body>
-    </html>
+        </body>
+      </html>
+    </QueryProvider>
+    </SessionProvider>
+    
   );
 }

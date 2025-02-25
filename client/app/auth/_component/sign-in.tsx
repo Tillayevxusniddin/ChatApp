@@ -7,6 +7,11 @@ import { Input } from "@/components/ui/input"
 import { Button } from '@/components/ui/button'
 import { Label } from "@/components/ui/label"
 import { useAuth } from '@/hooks/use-auth'
+import { useMutation } from '@tanstack/react-query'
+import { axiosClient } from '@/http/axios'
+import { IError } from '@/types'
+import { toast } from "sonner"
+
 
 
 function SignIn() {
@@ -17,9 +22,26 @@ function SignIn() {
     resolver: zodResolver(emailSchema),
     defaultValues: { email: ""},
   })
+
+  const { mutate, isPending } = useMutation({
+    mutationFn: async (email: string) => {
+      const { data } = await axiosClient.post<{email:string}>('/api/auth/login', { email })
+      return data
+    },
+    onSuccess: res => {
+      setEmail(res.email)
+      setStep('verify')
+      toast.success("Email sent")
+    },
+    onError: (error: IError) => {
+      if (error.response?.data?.message) {
+        return toast.error("Something went wrong", {description: error.response.data.message})
+      }
+    }
+  })
+
   function onSubmit(values: z.infer<typeof emailSchema>) {
-    setStep('verify')
-    setEmail(values.email)
+    mutate(values.email)
   }
   return (
     <div className='w-full'>
@@ -35,13 +57,13 @@ function SignIn() {
               <FormItem>
                 <Label>Email</Label>
                 <FormControl>
-                  <Input placeholder="admin@example.com" className='h-10 bg-secondary' {...field} />
+                  <Input placeholder="admin@example.com" disabled={isPending} className='h-10 bg-secondary' {...field} />
                 </FormControl>
                 <FormMessage className='text-xs text-red-500'/>
               </FormItem>
             )}
             />
-          <Button type="submit" className='w-full' size={'lg'}>Submit</Button>
+          <Button type="submit" className='w-full' size={'lg'} disabled={isPending} >Submit</Button>
         </form>
       </Form>
     </div>

@@ -9,6 +9,11 @@ import { Input } from "@/components/ui/input"
 import { REGEXP_ONLY_DIGITS } from "input-otp"
 import { Label } from "@/components/ui/label"
 import { useAuth } from "@/hooks/use-auth"
+import { useMutation } from "@tanstack/react-query"
+import { axiosClient } from "@/http/axios"
+import { toast } from "sonner"
+import { IError, IUser } from '@/types'
+import { signIn } from 'next-auth/react'
 
 
 function Verify() {
@@ -19,10 +24,28 @@ function Verify() {
       resolver: zodResolver(otpSchema),
       defaultValues: { email, otp: ""},
     })
+
+    const { mutate, isPending } = useMutation({
+      mutationFn: async (otp: string) => {
+        const { data } = await axiosClient.post<{user:IUser}>('/api/auth/verify', { email, otp })
+        return data
+      },
+      onSuccess: ({ user }) => {
+        signIn('credentials', {email: user.email, callbackUrl: '/'})
+        toast.success("Successfully verified")
+      },
+      onError: (error: IError) => {
+        if (error.response?.data?.message) {
+          return toast.error("Something went wrong", {description: error.response.data.message})
+        }
+      }
+    })
+
+
     function onSubmit(values: z.infer<typeof otpSchema>) {
-      console.log(values)
-      window.open('/', '_self')
+      mutate(values.otp)
     }
+
   return (
     <div className="w-full">
       <p className="text-center text-muted-foreground text-sm"> 
@@ -50,7 +73,7 @@ function Verify() {
               <FormItem>
                 <Label>One Time Password </Label>
                 <FormControl>
-                  <InputOTP maxLength={6} className="w-full" pattern={REGEXP_ONLY_DIGITS} {...field}>
+                  <InputOTP maxLength={6} className="w-full" pattern={REGEXP_ONLY_DIGITS} disabled={isPending} {...field}>
                     <InputOTPGroup className="w-full">
                       <InputOTPSlot index={0} className="w-full dark:bg-primary-foreground bg-secondary" />
                       <InputOTPSlot index={1} className="w-full dark:bg-primary-foreground bg-secondary"/>
@@ -68,7 +91,7 @@ function Verify() {
               </FormItem>
             )}
             />
-          <Button type="submit" className='w-full' size={'lg'}>Submit</Button>
+          <Button type="submit" className='w-full' size={'lg'} disabled={isPending} >Submit</Button>
         </form>
       </Form>
     </div>

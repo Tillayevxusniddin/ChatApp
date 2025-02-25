@@ -12,12 +12,14 @@ import InformationForm from '@/components/forms/information.form'
 import EmailForm from '@/components/forms/email.form'
 import NotificationForm from '@/components/forms/notification.form'
 import DangerZoneForm from '@/components/forms/danger-zone.form'
+import { signOut, useSession } from 'next-auth/react'
 
 
 const Settings = () => {
 
   const [ isProfileOpen, setIsProfileOpen] = useState(false)
   const { resolvedTheme, setTheme } = useTheme()
+  const { data: session } = useSession()
  
   return (
     <>
@@ -28,8 +30,8 @@ const Settings = () => {
           </Button>
         </PopoverTrigger>
         <PopoverContent className='p-0 w-80'>
-          <h2 className='pt-2 pl-2 text-muted-foreground'>
-            Settings: <span className='text-white'>tillayevx1@gmail.com</span>
+          <h2 className='pt-2 pl-2 text-muted-foreground text-sm'>
+            Settings: <span className='text-white'>{session?.currentUser?.email}</span>
           </h2>
           <Separator className='my-2'/>
           <div className='flex flex-col'>
@@ -63,7 +65,7 @@ const Settings = () => {
                 onCheckedChange={() => setTheme(resolvedTheme === 'dark' ? 'light':'dark')}
               />
             </div>
-            <div className='flex justify-between items-center bg-destructive p-2 cursor-pointer'>
+            <div className='flex justify-between items-center bg-destructive p-2 cursor-pointer' onClick={() => signOut()}>
               <div className='flex items-center gap-1'>
                 <LogIn size={16}/> 
                 <span className='text-sm'>Logout</span>
