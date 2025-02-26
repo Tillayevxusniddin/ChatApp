@@ -1,5 +1,6 @@
 const authContoller = require('../controllers/auth.contoller')
 const userController = require('../controllers/user.controller')
+const authMiddleware = require('../middlewares/auth.middleware')
 
 const router = require('express').Router()
 
@@ -18,14 +19,14 @@ router.group('/user', route => {
     route.post('/message-read', userController.messageRead)
     route.post('/contact', userController.createContact)
     route.post('/reaction', userController.createReaction)
-    route.post('/send-otp', userController.sendOtp)
+    route.post('/send-otp', authMiddleware ,userController.sendOtp)
 
     route.put('/message/:messageId', userController.updateMessage)
-    route.put('/profile', userController.updateProfile)
-    route.put('/email', userController.updateEmail)
+    route.put('/profile', authMiddleware, userController.updateProfile)
+    route.put('/email', authMiddleware, userController.updateEmail)
 
     route.delete('/message/:messageId', userController.deleteMessage)
-    route.delete('/', userController.deleteUser)
+    route.delete('/', authMiddleware, userController.deleteUser)
 })
 
 

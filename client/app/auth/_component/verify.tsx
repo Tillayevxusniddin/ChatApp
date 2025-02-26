@@ -12,7 +12,7 @@ import { useAuth } from "@/hooks/use-auth"
 import { useMutation } from "@tanstack/react-query"
 import { axiosClient } from "@/http/axios"
 import { toast } from "sonner"
-import { IError, IUser } from '@/types'
+import { IUser } from '@/types'
 import { signIn } from 'next-auth/react'
 
 
@@ -34,11 +34,6 @@ function Verify() {
         signIn('credentials', {email: user.email, callbackUrl: '/'})
         toast.success("Successfully verified")
       },
-      onError: (error: IError) => {
-        if (error.response?.data?.message) {
-          return toast.error("Something went wrong", {description: error.response.data.message})
-        }
-      }
     })
 
 
