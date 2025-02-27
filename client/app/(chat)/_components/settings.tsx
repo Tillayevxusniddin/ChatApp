@@ -6,20 +6,39 @@ import { Switch } from '@/components/ui/switch'
 import { useTheme } from 'next-themes'
 import {Sheet,SheetContent,SheetDescription,SheetHeader,SheetTitle} from "@/components/ui/sheet"
 import { useState } from 'react'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import InformationForm from '@/components/forms/information.form'
 import EmailForm from '@/components/forms/email.form'
 import NotificationForm from '@/components/forms/notification.form'
 import DangerZoneForm from '@/components/forms/danger-zone.form'
 import { signOut, useSession } from 'next-auth/react'
+import { useMutation } from '@tanstack/react-query'
+import { generateToken } from '@/lib/generate-token'
+import { axiosClient } from '@/http/axios'
+import { toast } from "sonner"
+import { UploadButton } from '@/lib/uploadthing'
+
 
 
 const Settings = () => {
 
   const [ isProfileOpen, setIsProfileOpen] = useState(false)
   const { resolvedTheme, setTheme } = useTheme()
-  const { data: session } = useSession()
+  const { data: session, update } = useSession()
+
+
+  const { mutate , isPending } = useMutation({
+    mutationFn: async (payload: IPayload) => {
+      const token = await generateToken(session?.currentUser?._id)
+      const { data } = await axiosClient.put( '/api/user/profile', payload ,{ headers: { Authorization: `Bearer ${token}`}})
+      return data
+    },
+    onSuccess: () => {
+      toast.success('Profile updated successfully')
+      update()
+    }
+  }) 
  
   return (
     <>
@@ -42,7 +61,9 @@ const Settings = () => {
                 <span className='text-sm'>Profile</span>
               </div>
             </div>
-            <div className='flex justify-between items-center p-2 hover:bg-secondary cursor-pointer'>
+            <div className='flex justify-between items-center p-2 hover:bg-secondary cursor-pointer'
+              onClick={() => window.location.reload()}
+            >
             <div className='flex items-center gap-1' onClick={() => setIsProfileOpen(true)}>
                 <UserPlus size={16}/> 
                 <span className='text-sm'>Add contact</span>
@@ -53,7 +74,11 @@ const Settings = () => {
                 <VolumeOff size={16}/> 
                 <span className='text-sm'>Mute</span>
               </div>
-              <Switch />
+              <Switch 
+                 checked={!session?.currentUser?.muted} 
+                 onCheckedChange={() => mutate({ muted: !session?.currentUser?.muted})} 
+                 disabled={isPending}
+              />
             </div>
             <div className='flex justify-between items-center p-2 hover:bg-secondary'>
               <div className='flex items-center gap-1'>
@@ -86,11 +111,18 @@ const Settings = () => {
           <Separator className='my-2' />
           <div className='mx-auto w-1/2 h-36 relative'>
             <Avatar className='w-full h-36'>
+              <AvatarImage src={session?.currentUser?.avatar} alt={session?.currentUser?.email} className='object-cover'/>
               <AvatarFallback className='text-6xl uppercase font-spaceGrotesk'>Download</AvatarFallback>
             </Avatar>
-            <Button size={'icon'} className='absolute right-0 bottom-0'>
-              <Upload size={16} />
-            </Button>
+            <UploadButton  endpoint='imageUploader'
+              onClientUploadComplete={res => {
+                mutate({avatar: res[0].url})
+              }}
+              config={{ appendOnPaste: true, mode: 'auto'}}
+              className='absolute right-0 bottom-0'
+              appearance={{ allowedContent: {display: 'none'}, button: {width: 40, height: 40, borderRadius: '100%'}}}
+              content={{ button: <Upload size={16}/> }}
+            />
           </div>
           <Accordion type='single' collapsible className='mt-4'>
             <AccordionItem value='item-1'>
@@ -121,3 +153,9 @@ const Settings = () => {
 }
 
 export default Settings
+
+
+interface IPayload {
+  muted?: boolean
+  avatar?: string
+}

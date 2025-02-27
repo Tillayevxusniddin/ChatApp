@@ -26,14 +26,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-
-    <SessionProvider>
-      <QueryProvider>
       <html lang="en" suppressHydrationWarning>
         <body
           className={` ${spaceGrotesk.variable} antialiased`}
           suppressHydrationWarning
-        >
+          >
+
+          <SessionProvider>
+            <QueryProvider>
+
+          
           <ThemeProvider
             attribute="class"
             defaultTheme="system"
@@ -43,10 +45,10 @@ export default function RootLayout({
             <main>{children}</main>
             <Toaster />
           </ThemeProvider>
-        </body>
-      </html>
     </QueryProvider>
     </SessionProvider>
+        </body>
+      </html>
     
   );
 }

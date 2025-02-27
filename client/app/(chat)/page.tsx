@@ -1,7 +1,7 @@
 'use client'
-// import { Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import ContactList from './_components/contact-list'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import AddContact from './_components/add-contact'
 import { useCurrentContact } from '@/hooks/use-current'
@@ -11,10 +11,20 @@ import { emailSchema, messageSchema } from '@/lib/validation'
 import { zodResolver } from '@hookform/resolvers/zod'
 import TopChat from './_components/top-chat'
 import Chat from './_components/chat'
+import { useLoading } from '@/hooks/use-loading'
+import { useSession } from 'next-auth/react'
+import { generateToken } from '@/lib/generate-token'
+import { axiosClient } from '@/http/axios'
+import { IError, IUser } from '@/types'
+import { toast } from 'sonner'
 
 const Homepage = () => {
 
+  const [ contacts, setContacts] = useState<IUser[]>([])
+
+  const {setCreating, setLoading, isLoading} = useLoading()
   const { currentContact } = useCurrentContact()
+  const { data: session } = useSession()
   const router = useRouter()
 
   const contactForm = useForm<z.infer<typeof emailSchema>>({
@@ -27,13 +37,49 @@ const Homepage = () => {
     defaultValues: { text: '', image: ''},
   })
 
+  const getContacts = async () => {
+    setLoading(true)
+    const token = await generateToken(session?.currentUser?._id)
+    try {
+      const {data} = await axiosClient.get<{ contacts: IUser[]}>('/api/user/contacts', {
+        headers: {Authorization: `Bearer ${token}`}
+      })
+      setContacts(data.contacts)
+    } catch {
+      toast.error('Cannot fetch contacts')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   useEffect(() => {
     router.replace('/')
   }, [])
 
-  const onCreateContact = (values: z.infer<typeof emailSchema>) => {
-    // API call
-    console.log(values)
+  useEffect(() => {
+    if (session?.currentUser?._id) {
+      getContacts()
+    }
+  }, [session?.currentUser])
+
+  const onCreateContact = async (values: z.infer<typeof emailSchema>) => {
+    setCreating(true)
+    const token = await generateToken(session?.currentUser?._id)
+    try {
+      const { data } = await axiosClient.post<{ contact: IUser}>('/api/user/contact', values, {
+        headers: { Authorization: `Bearer ${token}`}
+      })
+      setContacts(prev => [...prev, data.contact])
+      toast.success('Contact added successfully')
+      contactForm.reset()
+    } catch (error: any) {
+        if ((error as IError).response?.data?.message) {
+          return toast.error("Error", {description: (error as IError).response.data.message})
+        }
+        return toast.error("Something went wrong")
+    } finally {
+      setCreating(false)
+    }
   }
 
   const onSendMessage = (values: z.infer<typeof messageSchema>) => {
@@ -46,11 +92,13 @@ const Homepage = () => {
       {/* Sidebar */}
       <div className='w-80 h-screen border-r fixed inset-0 z-50'>
       {/* Loading */}
-      {/* <div className='w-full h-[95vh] flex justify-center items-center'>
-            <Loader2 size={50} className='animate-spin'/>
-                </div> */}
+      { isLoading && (
+        <div className='w-full h-[95vh] flex justify-center items-center'>
+          <Loader2 size={50} className='animate-spin'/>
+        </div>
+      )}
       { /* Contact  list */}
-        <ContactList contacts={contacts}/>
+        { isLoading && <ContactList contacts={contacts}/>}
       </div>
 
       {/* Chat area */}
@@ -69,14 +117,5 @@ const Homepage = () => {
   )
   
 }
-
-const contacts = [
-  {email: 'john@gmail.com', _id: '1', avatar: 'https://github.com/shadcn.png', firstName: "Johan", lastName: "Yonju", bio: "My hobbi is development"},
-  {email: 'milly@gmail.com', _id: '2', avatar: 'https://github.com/shadcn.png'},
-  {email: 'trit@gmail.com', _id: '3', avatar: 'https://github.com/shadcn.png'},
-  {email: 'phoenix@gmail.com', _id: '4', avatar: 'https://github.com/shadcn.png'},
-  {email: 'jack@gmail.com', _id: '5', avatar: 'https://github.com/shadcn.png'},
-]
-
 
 export default Homepage
