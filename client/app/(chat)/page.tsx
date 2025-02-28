@@ -1,7 +1,7 @@
 'use client'
 import { Loader2 } from 'lucide-react'
 import ContactList from './_components/contact-list'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import AddContact from './_components/add-contact'
 import { useCurrentContact } from '@/hooks/use-current'
@@ -17,6 +17,9 @@ import { generateToken } from '@/lib/generate-token'
 import { axiosClient } from '@/http/axios'
 import { IError, IUser } from '@/types'
 import { toast } from 'sonner'
+import { io } from 'socket.io-client'
+import { useAuth } from '@/hooks/use-auth'
+
 
 const Homepage = () => {
 
@@ -25,7 +28,10 @@ const Homepage = () => {
   const {setCreating, setLoading, isLoading} = useLoading()
   const { currentContact } = useCurrentContact()
   const { data: session } = useSession()
+  const { setOnlineUsers } = useAuth()
+
   const router = useRouter()
+  const socket = useRef<ReturnType<typeof io> | null>(null)
 
   const contactForm = useForm<z.infer<typeof emailSchema>>({
       resolver: zodResolver(emailSchema),
@@ -54,10 +60,16 @@ const Homepage = () => {
 
   useEffect(() => {
     router.replace('/')
+    socket.current = io('ws://localhost:5000')
   }, [])
 
   useEffect(() => {
     if (session?.currentUser?._id) {
+      socket.current?.emit('addOnlineUser', session.currentUser)
+      socket.current?.on('getOnlineUser', (data: { socketId: string, user: IUser}[]) => {
+        // console.log(users)
+        setOnlineUsers(data.map(item => item.user))
+      })
       getContacts()
     }
   }, [session?.currentUser])
@@ -98,7 +110,7 @@ const Homepage = () => {
         </div>
       )}
       { /* Contact  list */}
-        { isLoading && <ContactList contacts={contacts}/>}
+      {!isLoading && <ContactList contacts={contacts}/>}
       </div>
 
       {/* Chat area */}
