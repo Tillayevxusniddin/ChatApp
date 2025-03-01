@@ -13,7 +13,7 @@ router.group('/auth', route => {
 
 router.group('/user', route => {
     route.get('/contacts', authMiddleware, userController.getContacts)
-    route.get('/messages/:contactId', authMiddleware, userController.getMessage)
+    route.get('/messages/:contactId', authMiddleware, userController.getMessages)
 
     route.post('/message', authMiddleware, userController.createMessage)
     route.post('/message-read', authMiddleware, userController.messageRead)

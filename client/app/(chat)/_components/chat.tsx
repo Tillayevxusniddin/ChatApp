@@ -1,5 +1,5 @@
-// import ChatLoading from '@/components/loadings/chat.loading'
-// import MessageCard from '@/components/cards/message.card'
+import ChatLoading from '@/components/loadings/chat.loading'
+import MessageCard from '@/components/cards/message.card'
 import { Button } from '@/components/ui/button'
 import { Form, FormControl, FormField, FormItem } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
@@ -12,14 +12,19 @@ import emojies from '@emoji-mart/data'
 import Picker from '@emoji-mart/react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useTheme } from 'next-themes'
+import { useLoading } from '@/hooks/use-loading'
+import { IMessage } from '@/types'
 
 interface Props {
   onSendMessage: (values: z.infer<typeof messageSchema>) => void
   messageForm: UseFormReturn<z.infer<typeof messageSchema>>
+  messages: IMessage[]
 }
   
-const Chat: FC<Props> = ({onSendMessage, messageForm}) => {
+const Chat: FC<Props> = ({onSendMessage, messageForm, messages}) => {
   
+  const { loadMessages } = useLoading()
+
   const {resolvedTheme} = useTheme()
   const inputRef = useRef<HTMLInputElement | null>(null)
   const handleEmojiSelect = (emoji: string) => {
@@ -41,15 +46,19 @@ const Chat: FC<Props> = ({onSendMessage, messageForm}) => {
   return (
     <div className='flex flex-col justify-end z-40 min-h-[92vh]'>
       {/* Loading */}
-      {/* <ChatLoading /> */}
+      {loadMessages && <ChatLoading />}
 
       {/* Messages */}
-      {/* <MessageCard isReceived /> */}
+      {messages.map((message, index) => {
+        <MessageCard key={index} message={message} />
+      })}
       
       {/* Start kaiwa */}
-      <div className='w-full h-[88vh] flex items-center justify-center'>
-        <div className='text-[100px] cursor-pointer' onClick={() => onSendMessage({text: '✍️'})}>✍️</div>
-      </div>
+      { messages.length === 0 && (
+        <div className='w-full h-[88vh] flex items-center justify-center'>
+          <div className='text-[100px] cursor-pointer' onClick={() => onSendMessage({text: '✍️'})}>✍️</div>
+        </div>
+      )}     
       
       {/*  Message Input*/}
       <Form {...messageForm}>

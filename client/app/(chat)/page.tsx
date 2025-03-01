@@ -15,20 +15,24 @@ import { useLoading } from '@/hooks/use-loading'
 import { useSession } from 'next-auth/react'
 import { generateToken } from '@/lib/generate-token'
 import { axiosClient } from '@/http/axios'
-import { IError, IUser } from '@/types'
+import { IError, IMessage, IUser } from '@/types'
 import { toast } from 'sonner'
 import { io } from 'socket.io-client'
 import { useAuth } from '@/hooks/use-auth'
+import useAudio from '@/hooks/use-audio'
 
 
 const Homepage = () => {
 
   const [ contacts, setContacts] = useState<IUser[]>([])
+  const [ messages, setMessages] = useState<IMessage[]>([])
 
-  const {setCreating, setLoading, isLoading} = useLoading()
+  const {setCreating, setLoading, isLoading, setLoadMessages} = useLoading()
   const { currentContact } = useCurrentContact()
   const { data: session } = useSession()
   const { setOnlineUsers } = useAuth()
+  const { playSound } = useAudio()
+
 
   const router = useRouter()
   const socket = useRef<ReturnType<typeof io> | null>(null)
@@ -58,6 +62,22 @@ const Homepage = () => {
     }
   }
 
+  const getMessages = async () => {
+    setLoadMessages(true)
+    const token = await generateToken(session?.currentUser?._id)
+    try {
+      const { data } = await axiosClient.get<{messages: IMessage[]}>(`/api/user/messages/${currentContact?._id}`, {
+        headers: {Authorization: `Bearer ${token}`}
+      })
+      setMessages(data.messages)
+    } catch {
+      toast.error('Cannot fetch messages')
+    } finally {
+      setLoadMessages(false)
+    }
+  }
+
+
   useEffect(() => {
     router.replace('/')
     socket.current = io('ws://localhost:5000')
@@ -74,6 +94,35 @@ const Homepage = () => {
     }
   }, [session?.currentUser])
 
+  useEffect(() => {
+    if (session?.currentUser) {
+      socket.current?.on('getCreatedUser', user => {
+        setContacts(prev => {
+          const isExist = prev.some(item => item._id === user._id)
+          return isExist ? prev : [...prev, user]
+        })
+      })
+      socket.current?.on('getNewMessage', ({newMessage, receiver, sender}: GetSocketType) => {
+        setMessages(prev => {
+          const isExist = prev.some(item => item._id === newMessage._id)
+          return isExist ? prev : [...prev, newMessage]
+        })
+        toast.success(`${sender?.email.split('@')[0]} sent you message`)
+        if (receiver.muted) {
+          playSound(receiver.notificationSound)
+        }
+      })
+    }
+  }, [session?.currentUser, socket])
+
+  useEffect(() => {
+    if (currentContact?._id) {
+      getMessages()
+    }
+  }, [currentContact])
+
+  
+
   const onCreateContact = async (values: z.infer<typeof emailSchema>) => {
     setCreating(true)
     const token = await generateToken(session?.currentUser?._id)
@@ -82,6 +131,7 @@ const Homepage = () => {
         headers: { Authorization: `Bearer ${token}`}
       })
       setContacts(prev => [...prev, data.contact])
+      socket.current?.emit('createContact', {currentUser: session?.currentUser, receiver: data.contact})
       toast.success('Contact added successfully')
       contactForm.reset()
     } catch (error: any) {
@@ -94,9 +144,23 @@ const Homepage = () => {
     }
   }
 
-  const onSendMessage = (values: z.infer<typeof messageSchema>) => {
-    // API call
-    console.log(values)
+  const onSendMessage = async (values: z.infer<typeof messageSchema>) => {
+    setCreating(true)
+    const token = await generateToken(session?.currentUser?._id)
+    try {
+      const { data } = await axiosClient.post<GetSocketType>(
+        '/api/user/message', 
+        {...values, receiver: currentContact?._id}, 
+        {headers: {Authorization: `Bearer ${token}`}})
+      setMessages(prev => [...prev, data.newMessage])
+      messageForm.reset()
+      socket.current?.emit('sendMessage', { newMessage: data.newMessage, receiver: data.receiver, sender: data.sender})
+    } catch {
+      toast.error('Cannot send Message')
+    } finally {
+      setCreating(false)
+    }
+
   }
 
   return (
@@ -122,7 +186,7 @@ const Homepage = () => {
           {/* Top chat */}
           <TopChat />
           {/* Chat message */}
-          <Chat  messageForm={messageForm} onSendMessage={onSendMessage} />
+          <Chat  messageForm={messageForm} onSendMessage={onSendMessage} messages={messages} />
         </div> }
       </div>
   </>
@@ -131,3 +195,10 @@ const Homepage = () => {
 }
 
 export default Homepage
+
+
+interface GetSocketType {
+  receiver: IUser
+  sender: IUser
+  newMessage: IMessage
+}
