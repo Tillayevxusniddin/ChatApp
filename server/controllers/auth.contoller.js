@@ -13,7 +13,7 @@ class AuthContoller {
             }
             const newUser = await userModel.create({ email })
             await mailService.sendOtp(newUser.email)
-            res.status(200).json({ email: newUser.email })
+            return res.status(200).json({ email: newUser.email })
         } catch ( error ) {
             next(error)
         }
@@ -25,10 +25,10 @@ class AuthContoller {
             const result = await mailService.verifyOtp(email, otp)
             if (result) {
                 const user = await userModel.findOneAndUpdate({email}, {isVerified: true})
-                res.status(200).json({ user })
+                return res.status(200).json({ user })
             }
 
-            res.json({ email, otp})
+            return res.json({ email, otp})
         } catch (error) {
             next(error)
         }

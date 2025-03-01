@@ -27,6 +27,7 @@ class UserController {
 
                 contact.lastMessage = lastMessage
             }
+            return res.status(200).json({contacts: allContacts})
         } catch (error) {
             next(error)
         }

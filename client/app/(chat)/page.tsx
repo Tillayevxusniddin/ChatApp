@@ -177,6 +177,8 @@ const Homepage = () => {
       {!isLoading && <ContactList contacts={contacts}/>}
       </div>
 
+      
+
       {/* Chat area */}
       <div className='pl-80 w-full'>
         {/* Add contact */}
