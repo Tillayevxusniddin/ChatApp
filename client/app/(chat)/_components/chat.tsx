@@ -1,11 +1,10 @@
-import ChatLoading from '@/components/loadings/chat.loading'
 import MessageCard from '@/components/cards/message.card'
 import { Button } from '@/components/ui/button'
 import { Form, FormControl, FormField, FormItem } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { messageSchema } from '@/lib/validation'
 import { Paperclip, Send, Smile } from 'lucide-react'
-import React, { FC, useRef } from 'react'
+import React, { FC, useEffect, useRef } from 'react'
 import { UseFormReturn } from 'react-hook-form'
 import { z } from 'zod'
 import emojies from '@emoji-mart/data'
@@ -14,19 +13,40 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { useTheme } from 'next-themes'
 import { useLoading } from '@/hooks/use-loading'
 import { IMessage } from '@/types'
+import ChatLoading from '@/components/loadings/chat.loading'
+import { useSession } from 'next-auth/react'
 
 interface Props {
-  onSendMessage: (values: z.infer<typeof messageSchema>) => void
+  onSendMessage: (values: z.infer<typeof messageSchema>) => Promise<void>
+  onReadMessages: () => Promise<void>
   messageForm: UseFormReturn<z.infer<typeof messageSchema>>
   messages: IMessage[]
 }
   
-const Chat: FC<Props> = ({onSendMessage, messageForm, messages}) => {
+const Chat: FC<Props> = ({onSendMessage, messageForm, messages, onReadMessages}) => {
   
   const { loadMessages } = useLoading()
 
   const {resolvedTheme} = useTheme()
+  // const { currentContact } = useCurrentContact()
+  const { data: session } = useSession()
+  const scrollRef = useRef<HTMLFormElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
+
+  const filteredMessages = messages.filter(
+		(message, index, self) =>
+			((message.sender._id === session?.currentUser?._id && message.receiver._id === currentContact?._id) ||
+				(message.sender._id === currentContact?._id && message.receiver._id === session?.currentUser?._id)) &&
+			index === self.findIndex(m => m._id === message._id)
+	)
+
+  useEffect(() => {
+    scrollRef.current?.scrollIntoView({ behavior: 'smooth'})
+    onReadMessages()
+  }, [messages])
+
+
+
   const handleEmojiSelect = (emoji: string) => {
     const input = inputRef.current
     if (!input) return
@@ -49,9 +69,9 @@ const Chat: FC<Props> = ({onSendMessage, messageForm, messages}) => {
       {loadMessages && <ChatLoading />}
 
       {/* Messages */}
-      {messages.map((message, index) => {
-        <MessageCard key={index} message={message} />
-      })}
+      {filteredMessages.map((message, index) => (
+				<MessageCard key={index} message={message} />
+			))}
       
       {/* Start kaiwa */}
       { messages.length === 0 && (
@@ -62,7 +82,7 @@ const Chat: FC<Props> = ({onSendMessage, messageForm, messages}) => {
       
       {/*  Message Input*/}
       <Form {...messageForm}>
-        <form onSubmit={messageForm.handleSubmit(onSendMessage)} className='w-full flex relative'>
+        <form onSubmit={messageForm.handleSubmit(onSendMessage)} className='w-full flex relative' ref={scrollRef}>
           <Button size={'icon'} type='button' variant={'secondary'}>
               <Paperclip />
           </Button>
