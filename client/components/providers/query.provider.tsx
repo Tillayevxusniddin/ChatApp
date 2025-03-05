@@ -6,6 +6,7 @@ import { FC } from 'react'
 import { toast } from "sonner"
 
 const handleQueryError = (error: Error | IError) => {
+  console.log("Query error:", error);
   if ((error as IError).response?.data?.message) {
     return toast.error("Error", {description: (error as IError).response.data.message})
   }

@@ -4,7 +4,7 @@ import { Form, FormControl, FormField, FormItem } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { messageSchema } from '@/lib/validation'
 import { Paperclip, Send, Smile } from 'lucide-react'
-import React, { FC, useEffect, useRef } from 'react'
+import React, { ChangeEvent, FC, useEffect, useRef, useState } from 'react'
 import { UseFormReturn } from 'react-hook-form'
 import { z } from 'zod'
 import emojies from '@emoji-mart/data'
@@ -14,31 +14,37 @@ import { useTheme } from 'next-themes'
 import { useLoading } from '@/hooks/use-loading'
 import { IMessage } from '@/types'
 import ChatLoading from '@/components/loadings/chat.loading'
-import { useSession } from 'next-auth/react'
+import { useCurrentContact } from '@/hooks/use-current'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { UploadDropzone } from '@/lib/uploadthing'
 
 interface Props {
-  onSendMessage: (values: z.infer<typeof messageSchema>) => Promise<void>
+  onSubmitMessage: (values: z.infer<typeof messageSchema>) => Promise<void>
   onReadMessages: () => Promise<void>
+  onReaction: (reaction: string, messageId: string) => Promise<void>
+  onDeleteMessage: (messageId: string) => Promise<void>
+  onTyping: (e: ChangeEvent<HTMLInputElement>) => void
   messageForm: UseFormReturn<z.infer<typeof messageSchema>>
   messages: IMessage[]
 }
   
-const Chat: FC<Props> = ({onSendMessage, messageForm, messages, onReadMessages}) => {
+const Chat: FC<Props> = ({onSubmitMessage, messageForm, messages, onReadMessages, onReaction, onDeleteMessage, onTyping}) => {
   
-  const { loadMessages } = useLoading()
+  const [open, setOpen] = useState(false)
+  const { loadMessages} = useLoading()
 
   const {resolvedTheme} = useTheme()
-  // const { currentContact } = useCurrentContact()
-  const { data: session } = useSession()
+  const { editedMessage, setEditedMessage } = useCurrentContact()
   const scrollRef = useRef<HTMLFormElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
 
-  const filteredMessages = messages.filter(
-		(message, index, self) =>
-			((message.sender._id === session?.currentUser?._id && message.receiver._id === currentContact?._id) ||
-				(message.sender._id === currentContact?._id && message.receiver._id === session?.currentUser?._id)) &&
-			index === self.findIndex(m => m._id === message._id)
-	)
+  useEffect(() => {
+    if (editedMessage) {
+      messageForm.setValue('text', editedMessage.text)
+      scrollRef.current?.scrollIntoView({ behavior: 'smooth'})
+    }
+  }, [editedMessage])
+
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth'})
@@ -69,23 +75,42 @@ const Chat: FC<Props> = ({onSendMessage, messageForm, messages, onReadMessages})
       {loadMessages && <ChatLoading />}
 
       {/* Messages */}
-      {filteredMessages.map((message, index) => (
-				<MessageCard key={index} message={message} />
+      {messages.map((message, index) => (
+				<MessageCard key={index} message={message} onReaction={onReaction} onDeleteMessage={onDeleteMessage}/>
 			))}
       
       {/* Start kaiwa */}
       { messages.length === 0 && (
         <div className='w-full h-[88vh] flex items-center justify-center'>
-          <div className='text-[100px] cursor-pointer' onClick={() => onSendMessage({text: '✍️'})}>✍️</div>
+          <div className='text-[100px] cursor-pointer' onClick={() => onSubmitMessage({text: '✍️'})}>✍️</div>
         </div>
       )}     
       
       {/*  Message Input*/}
       <Form {...messageForm}>
-        <form onSubmit={messageForm.handleSubmit(onSendMessage)} className='w-full flex relative' ref={scrollRef}>
-          <Button size={'icon'} type='button' variant={'secondary'}>
-              <Paperclip />
-          </Button>
+        <form onSubmit={messageForm.handleSubmit(onSubmitMessage)} className='w-full flex relative' ref={scrollRef}>
+
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button size={'icon'} type='button' variant={'secondary'}>
+                <Paperclip />
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle/>
+              </DialogHeader>
+              <UploadDropzone 
+                endpoint={'imageUploader'}
+                onClientUploadComplete={(res => {
+                  onSubmitMessage({ text: '', image: res[0].url })
+                  setOpen(false)
+                })}
+                config={{ appendOnPaste: true, mode: 'auto'}}
+              />
+            </DialogContent>
+          </Dialog>
+
           <FormField
             control={messageForm.control}
             name="text"
@@ -97,7 +122,11 @@ const Chat: FC<Props> = ({onSendMessage, messageForm, messages, onReadMessages})
                     placeholder='Type a message'
                     value={field.value}
                     onBlur={() => field.onBlur()}
-                    onChange={e => field.onChange(e.target.value)}
+                    onChange={e => {
+                      field.onChange(e.target.value)
+                      onTyping(e)
+                      if (e.target.value === '') setEditedMessage(null)
+                    }}
                     ref={inputRef}
                   />
                 </FormControl>

@@ -1,7 +1,7 @@
 "use client";
 import { Loader2 } from "lucide-react";
 import ContactList from "./_components/contact-list";
-import { useEffect, useRef, useState } from "react";
+import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import AddContact from "./_components/add-contact";
 import { useCurrentContact } from "@/hooks/use-current";
@@ -26,9 +26,13 @@ const Homepage = () => {
   const [contacts, setContacts] = useState<IUser[]>([]);
   const [messages, setMessages] = useState<IMessage[]>([]);
 
-  const { setCreating, setLoading, isLoading, setLoadMessages } = useLoading();
-  const { currentContact } = useCurrentContact();
-  const { data: session } = useSession();
+  const { setCreating, setLoading, isLoading, setLoadMessages, setTyping } = useLoading();
+  const { currentContact, editedMessage, setEditedMessage } =
+    useCurrentContact();
+  const { data: session, status } = useSession();
+  console.log("Session status:", status);
+  console.log("Session data:", session);
+  
   const { setOnlineUsers } = useAuth();
   const { playSound } = useAudio();
 
@@ -56,8 +60,7 @@ const Homepage = () => {
         "/api/user/contacts",
         {
           headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+        });
       setContacts(data.contacts);
     } catch {
       toast.error("Cannot fetch contacts");
@@ -77,13 +80,18 @@ const Homepage = () => {
         }
       );
       setMessages(data.messages);
-      setContacts(prev => 
-        prev.map(item => 
-          item._id === currentContact?._id 
-            ?{...item, lastMessage: item.lastMessage ? {...item.lastMessage, status: CONST.READ} : null}
-            :item
+      setContacts((prev) =>
+        prev.map((item) =>
+          item._id === currentContact?._id
+            ? {
+                ...item,
+                lastMessage: item.lastMessage
+                  ? { ...item.lastMessage, status: CONST.READ }
+                  : null,
+              }
+            : item
         )
-      )
+      );
     } catch {
       toast.error("Cannot fetch messages");
     } finally {
@@ -118,13 +126,11 @@ const Homepage = () => {
           return isExist ? prev : [...prev, user];
         });
       });
-      socket.current?.on(
-        "getNewMessage",
-        ({ newMessage, receiver, sender }: GetSocketType) => {
-          setMessages((prev) => {
-            const isExist = prev.some((item) => item._id === newMessage._id);
-            return isExist ? prev : [...prev, newMessage];
-          });
+      socket.current?.on("getNewMessage",({ newMessage, receiver, sender }: GetSocketType) => {
+          setTyping('')
+          if (CONTACT_ID === sender._id) {
+            setMessages(prev => [...prev, newMessage])
+          }
           setContacts((prev) => {
             return prev.map((contact) => {
               if (contact._id === sender._id) {
@@ -156,6 +162,54 @@ const Homepage = () => {
           });
         });
       });
+      socket.current?.on("getUpdatedMessage",({ updatedMessage, sender }: GetSocketType) => {
+          setTyping('')
+          setMessages((prev) =>
+            prev.map((item) =>
+              item._id === updatedMessage._id
+                ? {
+                    ...item,
+                    reaction: updatedMessage.reaction,
+                    text: updatedMessage.text,
+                  }
+                : item
+            )
+          );
+          setContacts((prev) =>
+            prev.map((item) =>
+              item._id === sender._id
+                ? {
+                    ...item,
+                    lastMessage:
+                      item.lastMessage?._id === updatedMessage._id
+                        ? updatedMessage
+                        : item.lastMessage,
+                  }
+                : item
+            )
+          );
+        }
+      );
+      socket.current?.on("getDeletedMessage",({ deletedMessage, filteredMessages, sender }: GetSocketType) => {
+          setMessages((prev) =>
+            prev.filter((item) => item._id !== deletedMessage._id)
+          );
+          const lastMessage = filteredMessages.length ? filteredMessages[filteredMessages.length - 1] : null
+          setContacts(prev =>
+            prev.map(item =>
+              item._id === sender._id
+                ? { ...item, lastMessage: item.lastMessage?._id === deletedMessage._id ? lastMessage : item.lastMessage }
+                : item
+            )
+          )
+        }
+      );
+      socket.current?.on("getTyping", ({message, sender}: GetSocketType) => {
+        if(CONTACT_ID === sender._id) {
+          setTyping(message)
+        }
+      })
+
     }
   }, [session?.currentUser, socket, CONTACT_ID]);
 
@@ -195,6 +249,15 @@ const Homepage = () => {
     }
   };
 
+  const onSubmitMessage = async (values: z.infer<typeof messageSchema>) => {
+    setCreating(true);
+    if (editedMessage?._id) {
+      onEditMessage(editedMessage._id, values.text);
+    } else {
+      onSendMessage(values);
+    }
+  };
+
   const onSendMessage = async (values: z.infer<typeof messageSchema>) => {
     setCreating(true);
     const token = await generateToken(session?.currentUser?._id);
@@ -228,6 +291,46 @@ const Homepage = () => {
     }
   };
 
+  const onEditMessage = async (messageId: string, text: string) => {
+    const token = await generateToken(session?.currentUser?._id);
+    try {
+      const { data } = await axiosClient.put<{ updatedMessage: IMessage }>(
+        `/api/user/message/${messageId}`,
+        { text },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setMessages((prev) =>
+        prev.map((item) =>
+          item._id === data.updatedMessage._id
+            ? { ...item, text: data.updatedMessage.text }
+            : item
+        )
+      );
+      socket.current?.emit("updateMessage", {
+        updatedMessage: data.updatedMessage,
+        receiver: currentContact,
+        sender: session?.currentUser,
+      });
+      messageForm.reset();
+      setContacts((prev) =>
+        prev.map((item) =>
+          item._id === currentContact?._id
+            ? {
+                ...item,
+                lastMessage:
+                  item.lastMessage?._id === messageId
+                    ? data.updatedMessage
+                    : item.lastMessage,
+              }
+            : item
+        )
+      );
+      setEditedMessage(null);
+    } catch {
+      toast.error("Cannot edit message");
+    }
+  };
+
   const onReadMessages = async () => {
     const receivedMessages = messages
       .filter((message) => message.receiver._id === session?.currentUser?._id)
@@ -258,6 +361,73 @@ const Homepage = () => {
     }
   };
 
+  const onReaction = async (reaction: string, messageId: string) => {
+    const token = await generateToken(session?.currentUser?._id);
+    try {
+      const { data } = await axiosClient.post<{ updatedMessage: IMessage }>(
+        "/api/user/reaction",
+        { reaction, messageId },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setMessages((prev) =>
+        prev.map((item) =>
+          item._id === data.updatedMessage._id
+            ? { ...item, reaction: data.updatedMessage.reaction }
+            : item
+        )
+      );
+      socket.current?.emit("updateMessage", {
+        updatedMessage: data.updatedMessage,
+        receiver: currentContact,
+        sender: session?.currentUser,
+      });
+    } catch {
+      toast.error("Cannot react to message");
+    }
+  };
+
+  const onDeleteMessage = async (messageId: string) => {
+    const token = await generateToken(session?.currentUser?._id);
+    try {
+      const { data } = await axiosClient.delete<{ deletedMessage: IMessage }>(
+        `/api/user/message/${messageId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const filteredMessages = messages.filter(
+        (item) => item._id !== data.deletedMessage._id
+      );
+      const lastMessage = filteredMessages.length
+        ? filteredMessages[filteredMessages.length - 1]
+        : null;
+      setMessages(filteredMessages);
+      socket.current?.emit("deleteMessage", {
+        deletedMessage: data.deletedMessage,
+        sender: session?.currentUser,
+        receiver: currentContact,
+        filteredMessages,
+      });
+      setContacts((prev) =>
+        prev.map((item) =>
+          item._id === currentContact?._id
+            ? {
+                ...item,
+                lastMessage:
+                  item.lastMessage?._id === messageId
+                    ? lastMessage
+                    : item.lastMessage,
+              }
+            : item
+        )
+      );
+    } catch {
+      toast.error("Cannot delete message");
+    }
+  };
+
+  const onTyping = (e: ChangeEvent<HTMLInputElement>) => {
+    socket.current?.emit('typing', {receiver: currentContact, sender: session?.currentUser, message: e.target.value})
+  }
+
   return (
     <>
       <div className="w-80 h-screen border-r fixed inset-0 z-50">
@@ -278,12 +448,15 @@ const Homepage = () => {
 
         {currentContact?._id && (
           <div className="w-full relative">
-            <TopChat />
+            <TopChat messages={messages}/>
             <Chat
               messageForm={messageForm}
-              onSendMessage={onSendMessage}
+              onSubmitMessage={onSubmitMessage}
               messages={messages}
               onReadMessages={onReadMessages}
+              onReaction={onReaction}
+              onDeleteMessage={onDeleteMessage}
+              onTyping={onTyping}
             />
           </div>
         )}
@@ -295,7 +468,11 @@ const Homepage = () => {
 export default Homepage;
 
 interface GetSocketType {
-  receiver: IUser;
-  sender: IUser;
-  newMessage: IMessage;
+  receiver: IUser
+  sender: IUser
+  newMessage: IMessage
+  updatedMessage: IMessage
+  deletedMessage: IMessage
+  filteredMessages: IMessage[]
+  message: string
 }

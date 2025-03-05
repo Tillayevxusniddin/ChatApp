@@ -9,8 +9,14 @@ class UserController {
     // [GET]
     async getContacts(req, res, next) {
         try {
+            console.log(req);
+            if (!req.user?._id) {
+                return res.status(401).json({ message: "Unauthorized. User ID missing." });
+            }
             const userId = req.user._id
+            
             const contacts = await userModel.findById(userId).populate('contacts')
+            
             const allContacts =contacts.contacts.map(contact => contact.toObject())
 
             for (const contact of allContacts) {
@@ -136,7 +142,7 @@ class UserController {
         const result = await mailService.verifyOtp(email, otp)
         if (result) {
             const userId = req.user._id
-            const user = await userModel.findyByIdAndUpdate(userId, {email}, {new: true})
+            const user = await userModel.findByIdAndUpdate(userId, {email}, {new: true})
             res.status(200).json({ user })
         }
     }
@@ -154,8 +160,8 @@ class UserController {
     async deleteMessage (req, res, next) {
         try {
             const { messageId } = req.params
-            await messageModel.findByIdAndDelete(messageId)
-            res.status(200).json({ message: 'Message deleted succesfully' })
+            const deletedMessage = await messageModel.findByIdAndDelete(messageId)
+            res.status(200).json({ deletedMessage })
         } catch (error) {
             next(error)
         }
